@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="glass-card p-6 max-w-3xl mx-auto space-y-6">
+
+  <!-- Title + Goal + Status -->
+  <div class="flex justify-between items-center">
+    <h2 class="gradient-text text-3xl font-bold">
+      {{ competition.name }}
+      {% if competition.goal_alc_ml %}
+        <small class="text-sm text-gray-400 ml-2">
+          (Goal: {{ competition.goal_alc_ml }} ml)
+        </small>
+      {% endif %}
+    </h2>
+    {% if not competition.is_active %}
+      <span class="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full">
+        Ended
+      </span>
+    {% endif %}
+  </div>
+
+  <!-- Winner (only if we have one) -->
+  {% if winner %}
+    <div class="glass-card bg-green-900/30 p-4 rounded-lg">
+      <p class="text-lg">
+        🏆 <strong>Winner:</strong>
+        {{ winner.user.profile.display_name|default:winner.user.username }}
+        ({{ winner_total }} ml)
+      </p>
+    </div>
+  {% endif %}
+
+  <!-- Leaderboard -->
+  <h3 class="text-xl font-semibold">Leaderboard</h3>
+  <div class="space-y-2">
+    {% for entry in leaderboard %}
+      <div class="glass-card p-3 flex justify-between items-center">
+        <span>{{ forloop.counter }}. {{ entry.profile.user.username }}</span>
+        <span>{{ entry.total_alc }} ml consumed</span>
+      </div>
+    {% empty %}
+      <p>No entries yet.</p>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
