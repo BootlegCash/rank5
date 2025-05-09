@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     # Your apps
     'accounts',
     'achievements',
+    'competitions',
 
     # Third-party
     'corsheaders',
