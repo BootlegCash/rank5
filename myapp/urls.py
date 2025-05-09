@@ -1,22 +1,17 @@
-# myapp/urls.py
-
 from django.contrib import admin
 from django.urls import path, include
-from django.views.generic import RedirectView
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('accounts/', include('accounts.urls')),  # your existing logic
+    path('achievements/', include('achievements.urls')),
+    path('competitions/', include('competitions.urls')),
 
-    # 1. Most specific first:
-    path(
-        'accounts/competitions/',
-        include(('competitions.urls', 'competitions'),
-                namespace='competitions')
-    ),
-
-    # 2. Then the general accounts URLs:
-    path('accounts/', include('accounts.urls')),
-
-    # 3. Finally the root redirect:
-    path('', RedirectView.as_view(url='accounts/welcome/')),
+    # JWT Auth Endpoints
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
