@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import dj_database_url
+from zoneinfo import ZoneInfo
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
