@@ -5,6 +5,10 @@ from django.dispatch import receiver
 from django.utils import timezone
 from datetime import timedelta
 from achievements.models import Achievement
+from django.db import models
+from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 def current_log_date():
     """
@@ -208,3 +212,16 @@ class DailyLog(models.Model):
         self.save()
 
 
+class Profile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    xp = models.IntegerField(default=0)
+    rank = models.CharField(max_length=50, default='Bronze')
+    total_alcohol = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.user.username}'s Profile"
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.create(user=instance)
