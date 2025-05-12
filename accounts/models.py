@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from datetime import date
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -37,7 +38,7 @@ class Post(models.Model):
 class DailyLog(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     date = models.DateField()
-    # Optional: if you want these back later, uncomment after adding to forms.py too
+    # ✅ Uncomment if you plan to restore later
     # drink_count = models.IntegerField(default=0)
     # alcohol_ml = models.FloatField(default=0.0)
 
@@ -51,3 +52,6 @@ class Achievement(models.Model):
 
     def __str__(self):
         return self.name
+
+# ✅ Your custom drink tracking helper
+current_log_date = date.today()
