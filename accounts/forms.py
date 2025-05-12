@@ -13,7 +13,7 @@ class RegistrationForm(UserCreationForm):
 class StatsUpdateForm(forms.ModelForm):
     class Meta:
         model = Profile
-        fields = ['xp', 'rank', 'total_alcohol']   # ✅ ONLY fields that exist
+        fields = ['xp', 'rank', 'total_alcohol']
 
 class SendFriendRequestForm(forms.ModelForm):
     class Meta:
@@ -25,7 +25,8 @@ class PostForm(forms.ModelForm):
         model = Post
         fields = ['content']
 
+# ✅ Fixed version of DailyLogForm
 class DailyLogForm(forms.ModelForm):
     class Meta:
         model = DailyLog
-        fields = ['date', 'drink_count', 'alcohol_ml']
+        fields = ['date']   # ✅ ONLY fields that exist
