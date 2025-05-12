@@ -10,7 +10,7 @@ urlpatterns = [
     path('accounts/', include('accounts.urls')),
     path('achievements/', include('achievements.urls')),
     path('competitions/', include('competitions.urls')),
-    path('api/profile/', user_profile, name='user_profile')
+    path('api/profile/', user_profile, name='user_profile'),
 
     # JWT token endpoints
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
