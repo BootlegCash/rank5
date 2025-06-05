@@ -1,12 +1,33 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.utils import timezone
+from datetime import timedelta
+from achievements.models import Achievement
+
+def current_log_date():
+    """
+    Returns the effective log date for Arizona (America/Phoenix timezone).
+    Days run from 3 AM to 3 AM (adjusts the date if current time is between midnight-3 AM)
+    """
+    now = timezone.localtime(timezone.now())  # Convert to Arizona time
+    if now.hour < 3:  # If between midnight and 3 AM
+        return (now - timedelta(days=1)).date()  # Count as previous day
+    return now.date()
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
+    display_name = models.CharField(
+    max_length=15,
+    default='User',  # or another appropriate default value
+    help_text="Display name (letters only, max 15 characters)"
+)
+
 
     # Alcohol fields
-    beer = models.IntegerField(default=0, help_text="Number of beers drank (17 ml alcohol per beer)")
-    floco = models.IntegerField(default=0, help_text="Number of floco shots (43 ml alcohol per shot)")
+    beer = models.IntegerField(default=0, help_text="Number of Beers/Seltzers drank (17 ml alcohol per beer)")
+    floco = models.IntegerField(default=0, help_text="Number of Flocos (43 ml alcohol per shot)")
     rum = models.IntegerField(default=0, help_text="Number of rum shots (9 ml alcohol per shot)")
     whiskey = models.IntegerField(default=0, help_text="Number of whiskey shots (14 ml alcohol per shot)")
     vodka = models.IntegerField(default=0, help_text="Number of vodka shots (18 ml alcohol per shot)")
@@ -25,81 +46,84 @@ class Profile(models.Model):
     def __str__(self):
         return f"{self.user.username}'s Profile"
 
-    def calculate_alcohol_drank(self):
-        """
-        Calculate the total alcohol consumed in milliliters (ml).
-        """
-        beer_alc = self.beer * 17  # 17 ml per beer
-        floco_alc = self.floco * 43  # 43 ml per floco shot
-        rum_alc = self.rum * 9  # 9 ml per rum shot
-        whiskey_alc = self.whiskey * 14  # 14 ml per whiskey shot
-        vodka_alc = self.vodka * 18  # 18 ml per vodka shot
-        tequila_alc = self.tequila * 23  # 23 ml per tequila shot
+    @property
+    def post_count(self):
+        # Using a local import to avoid circular dependency
+        from .models import Post  
+        return Post.objects.filter(user=self).count()
 
-        total_alcohol = beer_alc + floco_alc + rum_alc + whiskey_alc + vodka_alc + tequila_alc
-        return total_alcohol
+    def calculate_alcohol_drank(self):
+        """Calculate total alcohol consumed in milliliters (ml)"""
+        return (
+            (self.beer * 17) +
+            (self.floco * 43) +
+            (self.rum * 9) +
+            (self.whiskey * 14) +
+            (self.vodka * 18) +
+            (self.tequila * 23)
+        )
 
     def calculate_xp(self):
-        """
-        Calculate the user's XP based on alcohol consumed, shotguns, snorkels, and thrown up.
-        """
-        total_alcohol = self.calculate_alcohol_drank()
-        xp = (total_alcohol * 0.75) + (self.shotguns * 5) + (self.snorkels * 15) - (self.thrown_up * 40)
-        return max(xp, 0)  # Ensure XP is not negative
-
-    @property
-    def xp_to_next_level(self):
-        """
-        Calculate the XP required to reach the next level.
-        """
-        if self.rank == "Bronze":
-            return 600
-        elif self.rank == "Silver":
-            return 1300
-        elif self.rank == "Gold":
-            return 3200
-        elif self.rank == "Platinum":
-            return 7300
-        elif self.rank == "Diamond":
-            return 15000  # Updated to 15,000 XP for Steez
-        else:
-            return 0  # Steez has no next level
-
-    @property
-    def xp_percentage(self):
-        """
-        Calculate the percentage of XP progress towards the next level.
-        """
-        if self.rank == "Steez":
-            return 100  # Steez is the highest rank
-        if self.xp_to_next_level == 0:
-            return 0  # Avoid division by zero
-        return (self.xp / self.xp_to_next_level) * 100
+        """Calculate XP with bonuses and penalties"""
+        alcohol_xp = self.calculate_alcohol_drank() * 0.75
+        bonus_xp = (self.shotguns * 5) + (self.snorkels * 15)
+        penalties = self.thrown_up * 40
+        return max(round(alcohol_xp + bonus_xp - penalties, 2), 0)
 
     def update_rank(self):
-        """
-        Update the user's rank based on their XP.
-        """
-        if self.xp < 600:
-            self.rank = "Bronze"
-        elif self.xp < 1300:
-            self.rank = "Silver"
-        elif self.xp < 3200:
-            self.rank = "Gold"
-        elif self.xp < 7300:
-            self.rank = "Platinum"
-        elif self.xp < 15000:  # Updated to 15,000 XP for Diamond
-            self.rank = "Diamond"
-        else:
-            self.rank = "Steez"  # Steez rank at 15,000 XP or higher
+        """Automatically update user rank based on XP"""
+        RANKS = [
+            (0, 'Bronze'),
+            (600, 'Silver'),
+            (1300, 'Gold'),
+            (3200, 'Platinum'),
+            (7300, 'Diamond'),
+            (15000, 'Steez')
+        ]
+        for xp_threshold, new_rank in reversed(RANKS):
+            if self.xp >= xp_threshold:
+                self.rank = new_rank
+                break
 
     def save(self, *args, **kwargs):
-        """
-        Automatically calculate XP and update rank before saving the profile.
-        """
+        """Auto-calculate XP and rank before saving"""
         self.xp = self.calculate_xp()
         self.update_rank()
         super().save(*args, **kwargs)
+
+    @property
+    def xp_to_next_level(self):
+        """XP needed to reach next rank"""
+        RANK_THRESHOLDS = {
+            'Bronze': 600,
+            'Silver': 1300,
+            'Gold': 3200,
+            'Platinum': 7300,
+            'Diamond': 15000,
+            'Steez': None
+        }
+        return RANK_THRESHOLDS.get(self.rank, 0)
+
+    @property
+    def xp_percentage(self):
+        """Progress to next rank as percentage"""
+        if self.rank == "Steez":
+            return 100
+        next_level = self.xp_to_next_level
+        if not next_level:
+            return 0
+        return min(100, int((self.xp / next_level) * 100))
+
+    def check_achievements(self):
+        """
+        Checks each Achievement defined in the achievements app to see if this profile qualifies.
+        Returns a list of Achievement objects.
+        """
+        earned = []
+        for achievement in Achievement.objects.all():
+            if achievement.qualifies(self):
+                earned.append(achievement)
+        return earned
 
 
 class FriendRequest(models.Model):
@@ -108,5 +132,79 @@ class FriendRequest(models.Model):
     accepted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        unique_together = ['from_user', 'to_user']
+
     def __str__(self):
-        return f"{self.from_user.user.username} -> {self.to_user.user.username} ({'Accepted' if self.accepted else 'Pending'})"
+        return f"{self.from_user} → {self.to_user} ({'Accepted' if self.accepted else 'Pending'})"
+
+    def accept(self):
+        """Accept friend request and establish mutual friendship"""
+        self.to_user.friends.add(self.from_user)
+        self.from_user.friends.add(self.to_user)
+        self.accepted = True
+        self.save()
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.create(user=instance)
+
+
+class Post(models.Model):
+    user = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    content = models.TextField(max_length=280)
+    created_at = models.DateTimeField(auto_now_add=True)
+    likes = models.ManyToManyField(Profile, related_name='liked_posts', blank=True)
+
+    def __str__(self):
+        return f"{self.user.user.username}: {self.content[:20]}..."
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class DailyLog(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="daily_logs")
+    date = models.DateField(help_text="Log date (3 AM to 3 AM)", default=current_log_date)
+    
+    beer = models.PositiveIntegerField(default=0)
+    floco = models.PositiveIntegerField(default=0)
+    rum = models.PositiveIntegerField(default=0)
+    whiskey = models.PositiveIntegerField(default=0)
+    vodka = models.PositiveIntegerField(default=0)
+    tequila = models.PositiveIntegerField(default=0)
+    shotguns = models.PositiveIntegerField(default=0)
+    snorkels = models.PositiveIntegerField(default=0)
+    thrown_up = models.PositiveIntegerField(default=0)
+    xp = models.IntegerField(default=0)
+    
+    class Meta:
+        unique_together = ("profile", "date")
+        ordering = ['-date']
+    
+    def __str__(self):
+        return f"{self.profile.user.username} - {self.date}"
+    
+    def calculate_alcohol_drank(self):
+        return (
+            (self.beer * 17) +
+            (self.floco * 43) +
+            (self.rum * 9) +
+            (self.whiskey * 14) +
+            (self.vodka * 18) +
+            (self.tequila * 23)
+        )
+    
+    def calculate_xp(self):
+        alcohol_xp = self.calculate_alcohol_drank() * 0.75
+        bonus_xp = (self.shotguns * 5) + (self.snorkels * 15)
+        penalties = self.thrown_up * 40
+        return max(round(alcohol_xp + bonus_xp - penalties, 2), 0)
+    
+    def update_xp(self):
+        self.xp = self.calculate_xp()
+        self.save()
+
+
