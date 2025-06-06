@@ -32,4 +32,5 @@ urlpatterns = [
     path('competitions/<int:pk>/',      views.competition_detail, name='competition_detail'),
     path('competitions/', include('competitions.urls', namespace='competitions')),
     # Add any additional URL patterns as needed
+    path('api/register/', register_user_api, name='api_register'),
 ]
