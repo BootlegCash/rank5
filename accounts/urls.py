@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-from .views import CreatePostView
+from .views import CreatePostView, register_user_api
 
 urlpatterns = [
     path('register/', views.register, name='register'),
