@@ -21,15 +21,6 @@ from achievements.models import Achievement
 from .forms import RegistrationForm, StatsUpdateForm, SendFriendRequestForm, PostForm, DailyLogForm
 from .models import Profile, FriendRequest, Post, DailyLog,current_log_date
 
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from django.contrib.auth.models import User
-
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-
 def register(request):
     if request.user.is_authenticated:
         return redirect('welcome')
@@ -568,19 +559,4 @@ def competitions(request):
     return render(request, 'accounts/competitions.html', {
         'created_comps': created_comps,
         'joined_comps':  joined_comps,
-    })
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def user_profile(request):
-    user = request.user
-    profile = user.profile  # Assuming you have a Profile model linked by OneToOneField
-
-    return Response({
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "xp": profile.xp,
-        "rank": profile.rank,
-        "total_alcohol": profile.total_alcohol
     })
