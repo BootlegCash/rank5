@@ -1,30 +1,51 @@
+# accounts/views.py
+
+# --- Python Standard Library Imports ---
 import calendar
 import random
 from datetime import date, datetime, timedelta
-from competitions.forms import CompetitionForm
-from competitions.models import Competition, CompetitionParticipant
-from competitions.forms import CompetitionForm
-from django.db.models import Q
 
-from django.shortcuts import render, redirect, get_object_or_404
+# --- Django Imports ---
+from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
-from django.contrib import messages
+from django.contrib.auth.models import User
+from django.db.models import Q
 from django.http import JsonResponse
+from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse_lazy
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView
-from django.urls import reverse_lazy
-from django.contrib.auth.models import User
-from django.utils import timezone
-from competitions.models import Competition, CompetitionParticipant
+
+# --- Django Rest Framework (DRF) Imports ---
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+
+# --- Local Application Imports ---
 from achievements.models import Achievement
-from .forms import RegistrationForm, StatsUpdateForm, SendFriendRequestForm, PostForm, DailyLogForm
-from .models import Profile, FriendRequest, Post, DailyLog,current_log_date
+from competitions.forms import CompetitionForm
+from competitions.models import Competition, CompetitionParticipant
+from .forms import (
+    RegistrationForm,
+    StatsUpdateForm,
+    SendFriendRequestForm,
+    PostForm,
+    DailyLogForm,
+)
+from .models import Profile, FriendRequest, Post, DailyLog, current_log_date
+
+
+# ==============================================================================
+# --- TEMPLATE-BASED VIEWS (for rendering HTML pages) ---
+# ==============================================================================
 
 def register(request):
     if request.user.is_authenticated:
         return redirect('welcome')
-        
+
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
@@ -35,10 +56,11 @@ def register(request):
         form = RegistrationForm()
     return render(request, 'accounts/register.html', {'form': form})
 
+
 def login_view(request):
     if request.user.is_authenticated:
         return redirect('welcome')
-        
+
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
@@ -54,11 +76,13 @@ def login_view(request):
                 messages.error(request, 'Invalid password')
     return render(request, 'accounts/login.html')
 
+
 @login_required
 def logout_view(request):
     logout(request)
     messages.success(request, 'Logged out successfully')
     return redirect('login')
+
 
 @login_required
 def profile(request):
@@ -70,26 +94,18 @@ def profile(request):
     })
 
 
-# accounts/views.py
-from achievements.models import Achievement
-# … other imports …
-
 @login_required
 def update_stats(request):
     profile = get_object_or_404(Profile, user=request.user)
-
-    # 1. Record which achievements the user already qualifies for
     old_qualified = set(profile.check_achievements())
 
     if request.method == 'POST':
         form = StatsUpdateForm(request.POST)
         if form.is_valid():
-            # 2a. Apply the increments to the Profile
             for field, increment in form.cleaned_data.items():
                 setattr(profile, field, getattr(profile, field, 0) + increment)
-            profile.save()  # recalculates xp and rank via your model.save()
+            profile.save()
 
-            # 2b. Update (or create) today's DailyLog
             log_date = current_log_date()
             daily_log, created = DailyLog.objects.get_or_create(
                 profile=profile, date=log_date
@@ -99,13 +115,10 @@ def update_stats(request):
             daily_log.xp = daily_log.calculate_xp()
             daily_log.save()
 
-            # 3. Determine newly unlocked achievements
             new_qualified = set(profile.check_achievements())
             just_unlocked = new_qualified - old_qualified
             for achievement in just_unlocked:
-                # persist it in the M2M so we don't re-notify forever
                 profile.earned_achievements.add(achievement)
-                # flash a message
                 messages.success(
                     request,
                     f'🎉 Congrats! You unlocked "{achievement.name}"!'
@@ -119,14 +132,10 @@ def update_stats(request):
     return render(request, 'accounts/update_stats.html', {'form': form})
 
 
-
-
 @login_required
 def leaderboard(request):
     profile_obj = get_object_or_404(Profile, user=request.user)
-    # IDs of all your friends
     friend_ids = profile_obj.friends.values_list('id', flat=True)
-    # Include both friends and yourself, ordered by XP desc
     profiles = Profile.objects.filter(
         Q(id__in=friend_ids) | Q(id=profile_obj.id)
     ).order_by('-xp')
@@ -135,16 +144,12 @@ def leaderboard(request):
         'user_profile': profile_obj
     })
 
+
 @login_required
 def friend_list(request):
     profile_obj = get_object_or_404(Profile, user=request.user)
-
-    received_requests = FriendRequest.objects.filter(
-        to_user=profile_obj, accepted=False
-    )
-    sent_requests = FriendRequest.objects.filter(
-        from_user=profile_obj, accepted=False
-    )
+    received_requests = FriendRequest.objects.filter(to_user=profile_obj, accepted=False)
+    sent_requests = FriendRequest.objects.filter(from_user=profile_obj, accepted=False)
 
     return render(request, 'accounts/friend_list.html', {
         'friends': profile_obj.friends.all(),
@@ -170,7 +175,6 @@ def send_friend_request(request):
                 elif to_user_profile in request.user.profile.friends.all():
                     messages.error(request, "You're already friends")
                 else:
-                    # CREATE THE FRIEND REQUEST
                     FriendRequest.objects.create(
                         from_user=request.user.profile,
                         to_user=to_user_profile
@@ -185,7 +189,6 @@ def send_friend_request(request):
     return render(request, 'accounts/send_friend_request.html', {'form': form})
 
 
-
 @login_required
 def accept_friend_request(request, request_id):
     friend_request = get_object_or_404(FriendRequest, id=request_id, to_user=request.user.profile)
@@ -196,6 +199,7 @@ def accept_friend_request(request, request_id):
         messages.error(request, f"Error accepting request: {str(e)}")
     return redirect('friend_list')
 
+
 @login_required
 def reject_friend_request(request, request_id):
     friend_request = get_object_or_404(FriendRequest, id=request_id, to_user=request.user.profile)
@@ -203,22 +207,6 @@ def reject_friend_request(request, request_id):
     messages.success(request, "Friend request rejected")
     return redirect('friend_list')
 
-@login_required
-def friend_list(request):
-    profile_obj = get_object_or_404(Profile, user=request.user)
-
-    received_requests = FriendRequest.objects.filter(
-        to_user=profile_obj, accepted=False
-    )
-    sent_requests = FriendRequest.objects.filter(
-        from_user=profile_obj, accepted=False
-    )
-
-    return render(request, 'accounts/friend_list.html', {
-        'friends': profile_obj.friends.all(),
-        'received_requests': received_requests,
-        'sent_requests': sent_requests,
-    })
 
 @login_required
 @require_POST
@@ -232,22 +220,6 @@ def remove_friend(request, profile_id):
         messages.error(request, "This user is not in your friend list.")
     return redirect('friend_list')
 
-@login_required
-def wheel_of_dares(request):
-    DARES = [
-        "Take a waterfall shot!",
-        "Do your best dance for 30 seconds",
-        "Tell an embarrassing story",
-        "Sing the chorus of your favorite song",
-        "Arm wrestle the person to your left"
-    ]
-    if request.method == 'POST':
-        dare = random.choice(DARES)
-        profile_obj = request.user.profile
-        profile_obj.xp += 25  # Bonus XP for completing the dare
-        profile_obj.save()
-        return render(request, 'accounts/wheel_result.html', {'dare': dare})
-    return render(request, 'accounts/wheel_spin.html')
 
 @login_required
 def welcome(request):
@@ -265,6 +237,7 @@ def welcome(request):
         form = PostForm()
     return render(request, 'accounts/welcome.html', {'posts': all_posts, 'form': form})
 
+
 @require_POST
 @login_required
 def like_post(request, post_id):
@@ -281,6 +254,7 @@ def like_post(request, post_id):
         'like_count': post_obj.likes.count()
     })
 
+
 class CreatePostView(CreateView):
     model = Post
     form_class = PostForm
@@ -291,34 +265,28 @@ class CreatePostView(CreateView):
         form.instance.user = self.request.user.profile
         return super().form_valid(form)
 
+
 def safety_guidelines(request):
     return render(request, 'accounts/safety_guidelines.html')
 
-# --- Added "about" view to resolve the URL error ---
+
 @login_required
 def about(request):
-    # Render a simple about page; ensure that you have an 'accounts/about.html' template
     return render(request, 'accounts/about.html')
 
 
 @login_required
 def achievements(request):
-    
-    from .models import Post
-
     profile_obj = request.user.profile
     all_achievements = Achievement.objects.all()
     earned = profile_obj.check_achievements()
 
-    # Mapping: achievement code to (attribute, target value)
-    # For the "post_count", we count posts by the user.
     progress_requirements = {
         "BEER_BEGINNER": ("beer", 10),
         "WHISKEY_WARRIOR": ("whiskey", 25),
         "RUM_RUNNER": ("rum", 20),
     }
 
-    # Calculate post count for achievements that count posts
     post_count = Post.objects.filter(user=profile_obj).count()
 
     achievements_list = []
@@ -327,16 +295,12 @@ def achievements(request):
         progress = 0
         if achievement.code in progress_requirements:
             attr, target = progress_requirements[achievement.code]
-            # For friends, count the number of friend relations
             if attr == "friends":
                 value = profile_obj.friends.count()
-            # For post_count, use the computed post_count
             elif attr == "post_count":
                 value = post_count
             else:
-                # For other attributes, get the value from profile (defaulting to 0)
                 value = getattr(profile_obj, attr, 0)
-            # Compute percentage; cap at 100%
             progress = min(100, int((value / target) * 100))
         else:
             progress = 100 if is_earned else 0
@@ -357,7 +321,6 @@ def friend_search(request):
     query = request.GET.get('q', '').strip()
     results = []
     if query:
-        # Exclude yourself
         results = Profile.objects.filter(
             user__username__icontains=query
         ).exclude(user=request.user)[:5]
@@ -369,83 +332,74 @@ def friend_search(request):
 
 @login_required
 def friend_profile(request, username):
-    """
-    Displays a full profile for a friend, including stats and achievements.
-    Shows a button to add or remove the friend based on the friendship status.
-    """
     friend_profile_obj = get_object_or_404(Profile, user__username=username)
     is_friend = friend_profile_obj in request.user.profile.friends.all()
-    # Optionally, if you want to pass achievements:
     earned_achievements = friend_profile_obj.check_achievements()
     
     return render(request, 'accounts/friend_profile.html', {
         'friend_profile': friend_profile_obj,
         'is_friend': is_friend,
-        'achievements': earned_achievements,  # if you're showing achievements here
+        'achievements': earned_achievements,
     })
 
 
 @login_required
 def update_daily_log(request):
     profile = get_object_or_404(Profile, user=request.user)
-    log_date = current_log_date()  # uses the helper function from models
+    log_date = current_log_date()
     daily_log, created = DailyLog.objects.get_or_create(profile=profile, date=log_date)
     
     if request.method == "POST":
         form = DailyLogForm(request.POST)
         if form.is_valid():
-            # Update each field by adding the increment to the existing value.
             for field, increment in form.cleaned_data.items():
-                current_val = getattr(daily_log, field, 0)
-                setattr(daily_log, field, current_val + increment)
+                if increment and increment > 0:
+                    current_val = getattr(daily_log, field, 0)
+                    setattr(daily_log, field, current_val + increment)
+            
             daily_log.xp = daily_log.calculate_xp()
             daily_log.save()
-            messages.success(request, "Today's log updated!")
+            
+            messages.success(request, "Today's log has been updated!")
             return redirect('profile')
     else:
         form = DailyLogForm()
     
     return render(request, "accounts/update_daily_log.html", {"form": form, "daily_log": daily_log})
 
+
 @login_required
 def daily_log_calendar(request):
     profile = get_object_or_404(Profile, user=request.user)
     logs = profile.daily_logs.all()
+    # This context is minimal. You may need a more complex calendar generation
+    # logic similar to monthly_calendar if you want a visual calendar.
     return render(request, "accounts/daily_log_calendar.html", {"logs": logs})
+
 
 @login_required
 def monthly_calendar(request, year=None, month=None):
     profile = get_object_or_404(Profile, user=request.user)
     
-    # Get current time in Arizona
     now = timezone.localtime(timezone.now())
     today = now.date()
     
-    # Default to current month if not provided
-    if not year:
-        year = today.year
-    if not month:
-        month = today.month
+    year = int(year) if year else today.year
+    month = int(month) if month else today.month
 
-    year = int(year)
-    month = int(month)
-
-    # Calculate the first and last day of the month (adjusted for 3 AM boundary)
-    first_day = datetime(year, month, 1, 3, 0, 0)  # 3 AM on first day
+    first_day = datetime(year, month, 1)
     if month == 12:
-        last_day = datetime(year+1, 1, 1, 2, 59, 59)  # 2:59:59 AM on Jan 1
+        last_day = datetime(year + 1, 1, 1) - timedelta(days=1)
     else:
-        last_day = datetime(year, month+1, 1, 2, 59, 59)  # 2:59:59 AM on first of next month
+        last_day = datetime(year, month + 1, 1) - timedelta(days=1)
 
-    # Get logs for the month (adjusted for 3 AM boundary)
     logs_for_month = DailyLog.objects.filter(
         profile=profile,
         date__gte=first_day.date(),
         date__lte=last_day.date()
     )
     
-    # Create a list of weeks where each day has its log data
-    cal = calendar.Calendar(firstweekday=6)  # Sunday first
+    cal = calendar.Calendar(firstweekday=6)
     month_weeks = []
     for week in cal.monthdatescalendar(year, month):
         week_days = []
@@ -460,11 +414,8 @@ def monthly_calendar(request, year=None, month=None):
             })
         month_weeks.append(week_days)
 
-    # Prepare navigation for previous/next month
-    prev_month = (first_day - timedelta(days=1)).month
-    prev_year = (first_day - timedelta(days=1)).year
-    next_month = (last_day + timedelta(days=1)).month
-    next_year = (last_day + timedelta(days=1)).year
+    prev_month_date = first_day - timedelta(days=1)
+    next_month_date = last_day + timedelta(days=1)
 
     context = {
         'year': year,
@@ -472,22 +423,19 @@ def monthly_calendar(request, year=None, month=None):
         'month_name': calendar.month_name[month],
         'weeks': month_weeks,
         'today': today,
-        'prev_year': prev_year,
-        'prev_month': prev_month,
-        'next_year': next_year,
-        'next_month': next_month,
+        'prev_year': prev_month_date.year,
+        'prev_month': prev_month_date.month,
+        'next_year': next_month_date.year,
+        'next_month': next_month_date.month,
     }
     return render(request, "accounts/monthly_calendar.html", context)
 
+
 @login_required
 def day_log_detail(request, year, month, day):
-    """
-    Displays the DailyLog for a specific day (using the year, month, day from the calendar).
-    If no log exists for that day, you can decide whether to show an empty log or a message.
-    """
     profile = get_object_or_404(Profile, user=request.user)
     try:
-        log_date = datetime(year, month, day).date()
+        log_date = date(year, month, day)
     except ValueError:
         return render(request, 'accounts/day_log_detail.html', {'error': 'Invalid date'})
 
@@ -498,15 +446,11 @@ def day_log_detail(request, year, month, day):
     })
 
 
-
-
-
 @login_required
 def competition_list(request):
-    """Show competitions you created or joined."""
     profile = request.user.profile
     created = profile.created_competitions.all()
-    joined  = profile.competitions.exclude(created_by=profile)
+    joined = profile.competitions.exclude(created_by=profile)
     return render(request, 'competitions/competition_list.html',{
         'created': created, 'joined': joined
     })
@@ -514,7 +458,6 @@ def competition_list(request):
 
 @login_required
 def competition_detail(request, pk):
-    """Display leaderboard and competition info."""
     comp = get_object_or_404(Competition, pk=pk)
     board = comp.leaderboard()
     return render(request, 'competitions/competition_detail.html',{
@@ -522,26 +465,17 @@ def competition_detail(request, pk):
     })
 
 
-
-
 @login_required
 def competition_create(request):
     if request.method == 'POST':
-        # pass the current user’s profile in if your form filters out yourself from the list
         form = CompetitionForm(request.POST, user_profile=request.user.profile)
         if form.is_valid():
-            # 1) Save the Competition itself, but don’t touch participants yet
             comp = form.save(commit=False)
             comp.created_by = request.user.profile
             comp.save()
-
-            # 2) This writes ONLY the friends you selected in the M2M widget
             form.save_m2m()
-
-            # 3) Make sure the creator is also enrolled exactly once
             comp.participants.add(request.user.profile)
-
-            return redirect('competitions:competition_detail', comp.pk)
+            return redirect('competitions:competition_detail', pk=comp.pk)
     else:
         form = CompetitionForm(user_profile=request.user.profile)
 
@@ -549,14 +483,50 @@ def competition_create(request):
         'form': form
     })
 
-@login_required
-def competitions(request):
-    profile = request.user.profile
-    # Competitions the user created
-    created_comps = Competition.objects.filter(created_by=profile)
-    # Competitions the user joined
-    joined_comps  = Competition.objects.filter(participants=profile)
-    return render(request, 'accounts/competitions.html', {
-        'created_comps': created_comps,
-        'joined_comps':  joined_comps,
+
+# ==============================================================================
+# --- API VIEWS (for your Flutter App) ---
+# ==============================================================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register_user_api(request):
+    """
+    API endpoint for user registration from the Flutter app.
+    """
+    if request.method == 'POST':
+        form = RegistrationForm(request.data)
+        if form.is_valid():
+            user = form.save()
+            return Response(
+                {
+                    "message": "User registered successfully.",
+                    "username": user.username,
+                    "email": user.email
+                },
+                status=status.HTTP_201_CREATED
+            )
+        else:
+            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"error": "This endpoint only supports POST requests."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_profile(request):
+    """
+    API endpoint to get the authenticated user's profile data.
+    """
+    user = request.user
+    profile = user.profile
+    
+    return Response({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "display_name": profile.display_name,
+        "xp": profile.xp,
+        "rank": profile.rank,
+        "total_alcohol": profile.total_alcohol
+        # You can add more fields from your Profile model here if needed
     })

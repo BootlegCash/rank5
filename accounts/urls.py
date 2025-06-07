@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-from .views import CreatePostView
+from .views import CreatePostView, register_user_api
 
 urlpatterns = [
     path('register/', views.register, name='register'),
@@ -31,5 +31,6 @@ urlpatterns = [
     path('competitions/create/',        views.competition_create, name='competition_create'),
     path('competitions/<int:pk>/',      views.competition_detail, name='competition_detail'),
     path('competitions/', include('competitions.urls', namespace='competitions')),
+    path('api/register/', register_user_api, name='api_register'),
     # Add any additional URL patterns as needed
 ]
