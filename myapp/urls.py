@@ -14,13 +14,11 @@ router.register(r'log_drink', DailyLogViewSet, basename='log_drink')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('accounts/', include('accounts.urls')),
+    path('accounts/', include('accounts.urls')), # <-- Keep this line (only once)
     path('achievements/', include('achievements.urls')),
     path('competitions/', include('competitions.urls')),
     path('api/profile/', user_profile, name='user_profile'),
-
     path('api/', include(router.urls)),
-    path('accounts/', include('accounts.urls')),
 
     # JWT token endpoints
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
