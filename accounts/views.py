@@ -513,16 +513,13 @@ def register_user_api(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def user_profile(request):
-    """
-    API endpoint to get the authenticated user's profile data.
-    This version includes debugging to check for a missing profile.
-    """
     user = request.user
+    print(f"--- API: Attempting to fetch profile for user: {user.username} (ID: {user.id}) ---")
+
     try:
-        # This is the line that was likely failing
         profile = user.profile
-        
-        # If it succeeds, it returns the normal profile data
+        print(f"--- API: Profile found for user: {user.username} ---")
+
         return Response({
             "id": user.id,
             "username": user.username,
@@ -530,11 +527,11 @@ def user_profile(request):
             "display_name": profile.display_name,
             "xp": profile.xp,
             "rank": profile.rank,
-            "total_alcohol": profile.total_alcohol
+            "total_alcohol": profile.total_alcohol,
         })
     except Profile.DoesNotExist:
-        # If user.profile fails, we now return a 404 error with a specific message.
+        print(f"--- API ERROR: Profile.DoesNotExist for user: {user.username} ---")
         return Response(
-            {"error": "Profile not found for this user. This confirms the profile was not created on registration."},
+            {"error": "Profile not found for this user. The creation process failed."},
             status=status.HTTP_404_NOT_FOUND
         )
