@@ -30,6 +30,5 @@ urlpatterns = [
      path('competitions/',               views.competition_list,   name='competition_list'),
     path('competitions/create/',        views.competition_create, name='competition_create'),
     path('competitions/<int:pk>/',      views.competition_detail, name='competition_detail'),
-    path('competitions/', include('competitions.urls', namespace='competitions')),
     # Add any additional URL patterns as needed
 ]
