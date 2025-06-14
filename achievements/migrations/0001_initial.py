@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('accounts', '0009_delete_achievement'),
+
     ]
 
     operations = [
