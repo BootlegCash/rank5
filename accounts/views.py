@@ -487,28 +487,54 @@ def competition_create(request):
 # --- API VIEWS (for your Flutter App) ---
 # ==============================================================================
 
+# In accounts/views.py
+# This is the new diagnostic version of your registration API view.
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user_api(request):
-    """
-    API endpoint for user registration from the Flutter app.
-    """
-    if request.method == 'POST':
-        form = RegistrationForm(request.data)
-        if form.is_valid():
-            user = form.save()
-            return Response(
-                {
-                    "message": "User registered successfully.",
-                    "username": user.username,
-                    "email": user.email
-                },
-                status=status.HTTP_201_CREATED
-            )
-        else:
-            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-    return Response({"error": "This endpoint only supports POST requests."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    # We manually get the data from the request
+    username = request.data.get('username')
+    email = request.data.get('email')
+    password = request.data.get('password1') # Remember, the form expects 'password1'
+    display_name = request.data.get('display_name')
 
+    # Basic validation
+    if not all([username, email, password, display_name]):
+        return Response({"error": "All fields are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    if User.objects.filter(username=username).exists():
+        return Response({"error": "A user with that username already exists."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        print("--- DIAGNOSTIC: Bypassing form.save() and using User.objects.create_user() directly. ---")
+
+        # Manually create the user using the method we know works from our shell test
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password
+        )
+        print(f"--- DIAGNOSTIC: User '{user.username}' created via create_user. ---")
+
+        # Manually ensure the profile exists and set the display name
+        # This is more direct than relying on the signal alone.
+        profile, created = Profile.objects.get_or_create(user=user)
+        if created:
+            print(f"--- DIAGNOSTIC: Profile was newly created for {user.username}. ---")
+        else:
+            print(f"--- DIAGNOSTIC: Profile already existed for {user.username}. ---")
+
+        profile.display_name = display_name
+        profile.save()
+        print(f"--- DIAGNOSTIC: Profile display_name set to '{profile.display_name}' and saved. ---")
+
+        return Response({"message": "User registered successfully via diagnostic path."}, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        # If anything goes wrong, we log it clearly.
+        print(f"--- DIAGNOSTIC ERROR: An exception occurred during manual user creation: {str(e)} ---")
+        return Response({"error": f"An unexpected server error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
