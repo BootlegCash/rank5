@@ -1,6 +1,15 @@
 from django.urls import path, include
 from . import views
 from .views import CreatePostView
+from . import api
+from rest_framework.routers import DefaultRouter
+from .api import DailyLogViewSet
+
+
+
+
+router = DefaultRouter()
+router.register(r'log_drink', DailyLogViewSet, basename='log-drink')
 
 urlpatterns = [
     path('register/', views.register, name='register'),
@@ -27,9 +36,8 @@ urlpatterns = [
     path('calendar/', views.monthly_calendar, name='monthly_calendar'),
     path('calendar/<int:year>/<int:month>/', views.monthly_calendar, name='monthly_calendar'),
     path('calendar/<int:year>/<int:month>/<int:day>/', views.day_log_detail, name='day_log_detail'),
-     path('competitions/',               views.competition_list,   name='competition_list'),
-    path('competitions/create/',        views.competition_create, name='competition_create'),
-    path('competitions/<int:pk>/',      views.competition_detail, name='competition_detail'),
-    path('competitions/', include('competitions.urls', namespace='competitions')),
+    path('api/profile/', api.user_profile, name='api_profile'),
+    path('api/', include(router.urls)),
+    path('', include(router.urls)),
     # Add any additional URL patterns as needed
 ]
