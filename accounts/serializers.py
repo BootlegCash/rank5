@@ -7,6 +7,6 @@ class DailyLogSerializer(serializers.ModelSerializer):
         model = DailyLog
         fields = [
             'date', 'profile', 'beer', 'floco', 'rum', 'whiskey',
-            'vodka', 'tequila', 'shotguns', 'snorkels', 'thrown_up'
+            'vodka', 'tequila', 'shotguns', 'snorkels', 'thrown_up', 'xp'
         ]
-        read_only_fields = ['date', 'profile']
+        read_only_fields = ['date', 'profile', 'xp']
